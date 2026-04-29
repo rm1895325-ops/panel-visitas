@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Panel de Visitas</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background-color: #7ab3d4;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #000;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      text-align: center;
+      padding: 40px 20px 20px;
+    }
+
+    header h1 {
+      font-size: 3.5vw;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #000;
+    }
+
+    header .fecha-hoy {
+      font-size: 1.8vw;
+      margin-top: 8px;
+      color: #000;
+      opacity: 0.75;
+    }
+
+    .divider {
+      width: 80%;
+      height: 2px;
+      background: #000;
+      margin: 16px auto;
+      opacity: 0.3;
+    }
+
+    .tabla-container {
+      flex: 1;
+      overflow: hidden;
+      padding: 0 5% 40px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    thead th {
+      font-size: 1.6vw;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 14px 20px;
+      border-bottom: 2px solid rgba(0,0,0,0.4);
+      color: #000;
+      text-align: left;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid rgba(0,0,0,0.15);
+      animation: fadeInRow 0.4s ease forwards;
+    }
+
+    tbody tr:hover {
+      background: rgba(255,255,255,0.15);
+    }
+
+    tbody td {
+      font-size: 2vw;
+      padding: 18px 20px;
+      color: #000;
+      vertical-align: middle;
+    }
+
+    .sin-visitas {
+      text-align: center;
+      font-size: 2vw;
+      opacity: 0.6;
+      padding: 60px 20px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 10px;
+      font-size: 1vw;
+      opacity: 0.4;
+    }
+
+    @keyframes fadeInRow {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Visitas del día</h1>
+  <div class="fecha-hoy" id="fecha-hoy"></div>
+</header>
+
+<div class="divider"></div>
+
+<div class="tabla-container">
+  <div id="contenido"></div>
+</div>
+
+<footer id="footer-info">Actualizando...</footer>
+
+<script>
+  // URL publica CSV de Google Sheets (Archivo > Publicar en la web > CSV)
+  const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQamM1euJyypOvqmpfxQBen_aIdBgbLXafPTY5xsElD-GuDxqzHftfZnJ88hdCbvVa7660nTQQe3_7J/pub?gid=0&single=true&output=csv";
+
+  const REFRESCO_MS = 60000;
+
+  function mostrarFecha() {
+    const ahora = new Date();
+    const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    const texto = ahora.toLocaleDateString('es-ES', opciones);
+    document.getElementById('fecha-hoy').textContent =
+      texto.charAt(0).toUpperCase() + texto.slice(1);
+  }
+
+  function parsearCSV(texto) {
+    const filas = texto.trim().split('\n');
+    return filas.map(fila => {
+      const cols = [];
+      let actual = '';
+      let dentro = false;
+      for (let i = 0; i < fila.length; i++) {
+        const c = fila[i];
+        if (c === '"') { dentro = !dentro; }
+        else if (c === ',' && !dentro) { cols.push(actual.trim()); actual = ''; }
+        else { actual += c; }
+      }
+      cols.push(actual.trim());
+      return cols;
+    });
+  }
+
+  function hoyString() {
+    const d = new Date();
+    const dd = String(d.getDate()).padStart(2,'0');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const yyyy = d.getFullYear();
+    return {
+      iso: yyyy + '-' + mm + '-' + dd,
+      es:  dd + '/' + mm + '/' + yyyy,
+      es2: dd + '-' + mm + '-' + yyyy
+    };
+  }
+
+  async function cargarVisitas() {
+    try {
+      const resp = await fetch(CSV_URL + '&nocache=' + Date.now());
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const texto = await resp.text();
+      const filas = parsearCSV(texto);
+
+      if (filas.length < 2) {
+        mostrarSinVisitas("No hay datos en la hoja.");
+        return;
+      }
+
+      const hoy = hoyString();
+      const visitasHoy = filas.slice(1).filter(f => {
+        if (!f[0]) return false;
+        const fecha = f[0].replace(/"/g,'').trim();
+        return fecha === hoy.iso || fecha === hoy.es || fecha === hoy.es2;
+      });
+
+      renderTabla(visitasHoy);
+      document.getElementById('footer-info').textContent =
+        'Ultima actualizacion: ' + new Date().toLocaleTimeString('es-ES');
+
+    } catch (e) {
+      mostrarSinVisitas("Error al cargar datos. Verifica que el Sheet esta publicado.");
+      console.error(e);
+    }
+  }
+
+  function renderTabla(visitas) {
+    const contenido = document.getElementById('contenido');
+
+    if (visitas.length === 0) {
+      mostrarSinVisitas("No hay visitas programadas para hoy.");
+      return;
+    }
+
+    let html = '<table><thead><tr>' +
+      '<th style="width:50%">Nombre y Apellidos</th>' +
+      '<th style="width:50%">Empresa</th>' +
+      '</tr></thead><tbody>';
+
+    visitas.forEach(function(f, i) {
+      const nombre  = (f[1] || '').replace(/"/g,'').trim();
+      const empresa = (f[2] || '').replace(/"/g,'').trim();
+      html += '<tr style="animation-delay:' + (i * 0.06) + 's">' +
+        '<td>' + (nombre  || '-') + '</td>' +
+        '<td>' + (empresa || '-') + '</td>' +
+        '</tr>';
+    });
+
+    html += '</tbody></table>';
+    contenido.innerHTML = html;
+  }
+
+  function mostrarSinVisitas(msg) {
+    document.getElementById('contenido').innerHTML =
+      '<p class="sin-visitas">' + msg + '</p>';
+  }
+
+  mostrarFecha();
+  cargarVisitas();
+  setInterval(cargarVisitas, REFRESCO_MS);
+  setInterval(mostrarFecha, 60000);
+</script>
+
+</body>
+</html>
