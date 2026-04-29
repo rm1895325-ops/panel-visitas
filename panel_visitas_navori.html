@@ -120,11 +120,8 @@
 <footer id="footer-info">Actualizando...</footer>
 
 <script>
-  // URL publica CSV de tu Google Sheet
+  // URL publica CSV de Google Sheets (Archivo > Publicar en la web > CSV)
   const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQamM1euJyypOvqmpfxQBen_aIdBgbLXafPTY5xsElD-GuDxqzHftfZnJ88hdCbvVa7660nTQQe3_7J/pub?gid=0&single=true&output=csv";
-
-  // Proxy para evitar bloqueo CORS de Google
-  const PROXY = "https://corsproxy.io/?url=";
 
   const REFRESCO_MS = 60000;
 
@@ -138,7 +135,7 @@
 
   function parsearCSV(texto) {
     const filas = texto.trim().split('\n');
-    return filas.map(function(fila) {
+    return filas.map(fila => {
       const cols = [];
       let actual = '';
       let dentro = false;
@@ -167,8 +164,7 @@
 
   async function cargarVisitas() {
     try {
-      const url = PROXY + encodeURIComponent(CSV_URL + '&nocache=' + Date.now());
-      const resp = await fetch(url);
+      const resp = await fetch(CSV_URL + '&nocache=' + Date.now());
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const texto = await resp.text();
       const filas = parsearCSV(texto);
@@ -179,7 +175,7 @@
       }
 
       const hoy = hoyString();
-      const visitasHoy = filas.slice(1).filter(function(f) {
+      const visitasHoy = filas.slice(1).filter(f => {
         if (!f[0]) return false;
         const fecha = f[0].replace(/"/g,'').trim();
         return fecha === hoy.iso || fecha === hoy.es || fecha === hoy.es2;
@@ -190,7 +186,7 @@
         'Ultima actualizacion: ' + new Date().toLocaleTimeString('es-ES');
 
     } catch (e) {
-      mostrarSinVisitas("Error al cargar datos: " + e.message);
+      mostrarSinVisitas("Error al cargar datos. Verifica que el Sheet esta publicado.");
       console.error(e);
     }
   }
